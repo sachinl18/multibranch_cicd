@@ -30,8 +30,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Use env.GIT_BRANCH or a similar variable based on your setup
-                    def branchName = env.GIT_BRANCH?.replace('refs/heads/', '') ?: 'unknown'
+                    def branchName = env.BRANCH_NAME
                     def lambdaFunctionName
 
                     if (branchName == 'dev') {
