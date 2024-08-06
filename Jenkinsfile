@@ -30,17 +30,16 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    def branchName = env.BRANCH_NAME
                     def lambdaFunctionName
 
-                    if (branchName == 'dev') {
+                    if (env.BRANCH_NAME == 'dev') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_DEV
-                    } else if (branchName == 'QA') {
+                    } else if (env.BRANCH_NAME == 'QA') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_QA
-                    } else if (branchName == 'ACC') {
+                    } else if (env.BRANCH_NAME == 'ACC') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_ACC
                     } else {
-                        error "Branch ${branchName} is not recognized for deployment"
+                        error "Branch ${env.BRANCH_NAME} is not recognized for deployment"
                     }
 
                     withAWS(credentials: 'aws-cred', region: "${env.AWS_REGION}") {
