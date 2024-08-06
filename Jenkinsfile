@@ -30,15 +30,14 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Use env.GIT_BRANCH or a similar variable based on your setup
-                    def branchName = env.GIT_BRANCH?.replace('refs/heads/', '') ?: 'unknown'
+                    def branchName = env.BRANCH_NAME
                     def lambdaFunctionName
 
                     if (branchName == 'dev') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_DEV
-                    } else if (branchName == 'qa') {
+                    } else if (branchName == 'QA') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_QA
-                    } else if (branchName == 'acc') {
+                    } else if (branchName == 'ACC') {
                         lambdaFunctionName = env.LAMBDA_FUNCTION_NAME_ACC
                     } else {
                         error "Branch ${branchName} is not recognized for deployment"
