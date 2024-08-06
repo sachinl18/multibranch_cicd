@@ -6,7 +6,7 @@ pipeline {
         LAMBDA_FUNCTION_NAME_DEV = 'myLambdaDev'
         LAMBDA_FUNCTION_NAME_QA = 'myLambdaQA'
         LAMBDA_FUNCTION_NAME_ACC = 'myLambdaACC'
-        JAR_FILE = 'build/libs/jb-hello-world-0.1.0.jar'
+        JAR_FILE = 'app/build/libs/jb-hello-world-0.1.0.jar'
         S3_BUCKET = 'sachin-s3-lambda-bucket'
     }
 
