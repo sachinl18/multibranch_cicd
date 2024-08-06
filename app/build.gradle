@@ -8,7 +8,10 @@ version '1.0-SNAPSHOT'
 repositories {
     mavenCentral()
 }
-
+jar {
+    baseName = 'jb-hello-world'
+    version = '0.1.0'
+}
 dependencies {
     // JUnit Jupiter API and Engine
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.3'
