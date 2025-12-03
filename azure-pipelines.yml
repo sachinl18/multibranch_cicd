@@ -15,7 +15,7 @@ variables:
   batchName: 'simple-batch'
   project: 'batch-dev'
   imageName: 'simple-image'
-  jar_file: 'jb-hello-world-0.1.0'
+  jar_file: 'app/build/libs/jb-hello-world-0.1.0'
 
   # ECR details (replace account ID)
   ecrRegion: 'ap-south-1'
