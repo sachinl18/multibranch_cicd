@@ -4,98 +4,170 @@ trigger:
       - develop
 
 pool:
-  name: 'Default'
+  name: 'Default'      # self-hosted agent pool (same as your Lambda pipeline)
 
 variables:
-  
-  # Environment details (hardcoded for dev)
-  environmentName: 'dev'
-  batchName: 'simple-batch'
-  project: 'batch-dev'
-  imageName: 'simple-image'
-  jar_file: 'app/build/libs/jb-hello-world-0.1.0'
 
-  # ECR details (replace account ID)
-  ecrRegion: 'ap-south-1'
-  ecrRepoUrl: '869935097287.dkr.ecr.ap-south-1.amazonaws.com/batch-main'
 
-steps:
-# -----------------------------
-# Checkout repo
-# -----------------------------
-- checkout: self
-  clean: true
 
-# -----------------------------
-# Gradle Build
-# -----------------------------
-- script: |
-    echo ">>>>>>>>>>>>>>>>>> Gradle Build Started"
-    chmod +x gradlew
-    ./gradlew clean build testClasses -x test
-    echo "<<<<<<<<<<<<<<<<<< Gradle Build Completed"
-  displayName: "Gradle Build"
+# --------- General AWS / env settings ----------
+- name: AWS_REGION
+  value: 'ap-south-1'     # region for ECR + S3 (change if needed)
 
-# -----------------------------
-# Rename JAR as per Jenkins style
-# -----------------------------
-- script: |
-    JAR="$(jar_file).jar"
-    JAR_VER="$(jar_file)-$(environmentName)-$(VERSION).jar"
-    echo "Renaming $JAR -> $JAR_VER"
-    mv build/libs/$JAR build/libs/$JAR_VER
-  displayName: "Rename JAR"
-# -----------------------------
-# Upload JAR to S3
-# -----------------------------
-- task: AWSCLI@1
-  displayName: "Upload JAR to S3"
-  inputs:
-    awsCredentials: 'S3_Lmabda'
-    regionName: 'eu-west-3'
-    awsCommand: 's3 cp build/libs/*.jar s3://awweu3allbatchesartifacts'
+- name: ENVIRONMENT_NAME
+  value: 'dev'
 
-# -----------------------------
-# Prepare Dockerfile using changeEnv_region.sh (Dev → tmfdev)
-# -----------------------------
-- script: |
-    chmod +x changeEnv_region.sh
-    ./changeEnv_region.sh tmfdev
-    echo "Dockerfile After Update:"
-    cat Dockerfile
-  displayName: "Update Dockerfile (changeEnv_region.sh)"
+- name: PROJECT
+  value: 'batch-dev'
 
-# -----------------------------
-# Login to AWS ECR
-# -----------------------------
-- script: |
-    echo "Logging in to ECR: $(ecrRepoUrl)"
-    aws ecr get-login-password --region $(ecrRegion) \
-        | docker login --username AWS --password-stdin $(ecrRepoUrl)
-  env:
-    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)          # secret variable
-    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)  # secret variable
-  displayName: "Docker Login to ECR"
+- name: IMAGE_NAME
+  value: 'enate-l2-dev'
 
-# -----------------------------
-# Build Docker Image
-# -----------------------------
-- script: |
-    IMAGE_TAG="$(project):$(imageName)"
-    echo "Building Docker image: $IMAGE_TAG"
-    docker build -t $IMAGE_TAG .
-  displayName: "Build Docker Image"
 
-# -----------------------------
-# Tag & Push Docker Image
-# -----------------------------
-- script: |
-    LOCAL_IMAGE="$(project):$(imageName)"
-    REMOTE_IMAGE="$(ecrRepoUrl):$(imageName)"
+- name: JAR_FILE
+  value: 'jb-hello-world-0.1.0.jar'
 
-    echo "Tagging $LOCAL_IMAGE -> $REMOTE_IMAGE"
-    docker tag $LOCAL_IMAGE $REMOTE_IMAGE
 
-    echo "Pushing Docker image to ECR"
-    docker push $REMOTE_IMAGE
-  displayName: "Push Docker Image to ECR"
+- name: S3_BUCKET
+  value: 'batchartifacts-sachi'   # your bucket
+
+# unique S3 key (includes env & build number)
+- name: S3_KEY
+  value: '$(PROJECT)/$(ENVIRONMENT_NAME)/$(Build.BuildId)/$(JAR_FILE)'
+
+# --------- AWS DevOps service connection ----------
+- name: AWS_SERVICE_CONNECTION
+  value: 'S3_Lmabda'   # existing AWS service connection
+
+# --------- ECR settings ----------
+- name: ECR_ACCOUNT_ID
+  value: '869935097287.dkr.ecr.ap-south-1.amazonaws.com/batch-main' 
+
+- name: ECR_REPOSITORY
+  value: 'batch-dev'    
+
+
+stages:
+- stage: Build
+  displayName: 'Build (Gradle)'
+  jobs:
+  - job: BuildJob
+    displayName: 'Gradle Build'
+    steps:
+    - checkout: self
+      clean: true
+
+    - script: |
+        echo "Java version:"
+        java -version || true
+        echo "Gradle wrapper version:"
+        ./gradlew -v || (echo "Gradle wrapper missing or not executable"; exit 1)
+      displayName: 'Verify build tools'
+
+    - script: |
+        chmod +x gradlew
+        ./gradlew clean build
+      displayName: 'Gradle: clean build'
+
+    - script: |
+        echo "Listing produced jars in build/libs:"
+        ls -lah build/libs || true
+        ls -lah build/libs/$(JAR_FILE) || echo "Expected JAR $(JAR_FILE) not found"
+      displayName: 'List build artifacts'
+
+    - publish: build/libs
+      artifact: drop
+      displayName: 'Publish build artifacts (for S3 + Docker)'
+
+- stage: UploadToS3
+  displayName: 'Upload artifact to S3'
+  dependsOn: Build
+  jobs:
+  - job: UploadJob
+    displayName: 'S3 Upload'
+    steps:
+    - download: current
+      artifact: drop
+
+    - script: |
+        echo ">>> Debug: JAR in drop"
+        echo "Pipeline.Workspace: $(Pipeline.Workspace)"
+        ls -lah $(Pipeline.Workspace)/drop || true
+        ls -lah $(Pipeline.Workspace)/drop/$(JAR_FILE) || echo "JAR not found at drop/$(JAR_FILE)"
+      displayName: 'Debug: check downloaded artifact'
+
+    - task: AWSCLI@1
+      displayName: 'Test S3 connectivity'
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(AWS_REGION)'
+        awsCommand: 's3'
+        awsSubCommand: 'ls'
+        awsArguments: 's3://$(S3_BUCKET)'
+
+    - task: AWSCLI@1
+      displayName: 'Upload JAR to S3'
+      inputs:
+        awsCredentials: '$(AWS_SERVICE_CONNECTION)'
+        regionName: '$(AWS_REGION)'
+        awsCommand: 's3'
+        awsSubCommand: 'cp'
+        awsArguments: '$(Pipeline.Workspace)/drop/$(JAR_FILE) s3://$(S3_BUCKET)/$(S3_KEY) --no-progress'
+
+- stage: BuildAndPushECR
+  displayName: 'Build & Push Docker Image to ECR'
+  dependsOn: UploadToS3
+  jobs:
+  - job: ECRJob
+    displayName: 'Docker build & push'
+    steps:
+    - download: current
+      artifact: drop
+
+    - script: |
+        echo "Contents of docker context (drop):"
+        ls -lah $(Pipeline.Workspace)/drop
+      displayName: 'List docker context'
+
+    - script: |
+        cd $(Pipeline.Workspace)/drop
+
+        echo "Making changeEnv_region.sh executable (if present)"
+        chmod +x changeEnv_region.sh || true
+
+        echo "Updating Dockerfile using changeEnv_region.sh for 'tmfdev'"
+        ./changeEnv_region.sh tmfdev || true
+
+        echo "Dockerfile after update:"
+        cat Dockerfile || echo "Dockerfile missing!"
+      displayName: 'Update Dockerfile via changeEnv_region.sh'
+
+    - script: |
+        echo "Login to ECR..."
+        aws ecr get-login-password --region $(AWS_REGION) \
+          | docker login --username AWS --password-stdin $(ECR_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com
+      displayName: 'Docker login to ECR'
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: $(AWS_REGION)
+
+    - script: |
+        cd $(Pipeline.Workspace)/drop
+
+        FULL_REPO="$(ECR_ACCOUNT_ID).dkr.ecr.$(AWS_REGION).amazonaws.com/$(ECR_REPOSITORY)"
+        IMAGE_TAG="$(IMAGE_NAME)"
+
+        echo "Building Docker image: $FULL_REPO:$IMAGE_TAG"
+        docker build -t $FULL_REPO:$IMAGE_TAG .
+
+        echo "Pushing Docker image: $FULL_REPO:$IMAGE_TAG"
+        docker push $FULL_REPO:$IMAGE_TAG
+      displayName: 'Docker build & push'
+      env:
+        AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+        AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+        AWS_DEFAULT_REGION: $(AWS_REGION)
+
+
+
