@@ -56,7 +56,7 @@ steps:
 - task: AWSCLI@1
   displayName: "Upload JAR to S3"
   inputs:
-    awsCredentials: 'aws-ecr-dev'
+    awsCredentials: 'S3_Lmabda'
     regionName: 'eu-west-3'
     awsCommand: 's3 cp build/libs/*.jar s3://awweu3allbatchesartifacts'
 
