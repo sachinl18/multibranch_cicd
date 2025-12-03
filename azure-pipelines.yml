@@ -4,7 +4,7 @@ trigger:
       - develop
 
 pool:
-  Image: 'raam'
+  name: 'Default'
 
 variables:
   # Java (Already available in Azure DevOps)
