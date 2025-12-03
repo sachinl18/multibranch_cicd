@@ -7,9 +7,7 @@ pool:
   name: 'Default'
 
 variables:
-  JAVA_HOME: '/usr/lib/jvm/msopenjdk-21'
-  VERSION: $(Build.BuildId)
-
+  
   # Environment details (hardcoded for dev)
   environmentName: 'dev'
   batchName: 'simple-batch'
