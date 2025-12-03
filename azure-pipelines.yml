@@ -1,0 +1,106 @@
+trigger:
+  branches:
+    include:
+      - develop
+
+pool:
+  Image: 'Default'
+
+variables:
+  # Java (Already available in Azure DevOps)
+  JAVA_HOME: '/usr/lib/jvm/msopenjdk-21'
+  PATH: '$(JAVA_HOME)/bin:$(PATH)'
+  VERSION: $(Build.BuildId)
+
+  # Environment details (hardcoded for dev)
+  environmentName: 'dev'
+  batchName: 'simple-batch'
+  project: 'batch-dev'
+  imageName: 'simple-image'
+  jar_file: 'jb-hello-world-0.1.0.jar'
+
+  # ECR details (replace account ID)
+  ecrRegion: 'ap-south-1'
+  ecrRepoUrl: '869935097287.dkr.ecr.ap-south-1.amazonaws.com/batch-main'
+
+steps:
+# -----------------------------
+# Checkout repo
+# -----------------------------
+- checkout: self
+  clean: true
+
+# -----------------------------
+# Gradle Build
+# -----------------------------
+- script: |
+    echo ">>>>>>>>>>>>>>>>>> Gradle Build Started"
+    chmod +x gradlew
+    ./gradlew clean build testClasses -x test
+    echo "<<<<<<<<<<<<<<<<<< Gradle Build Completed"
+  displayName: "Gradle Build"
+
+# -----------------------------
+# Rename JAR as per Jenkins style
+# -----------------------------
+- script: |
+    JAR="$(jar_file)"
+    JAR_VER="$(jar_file)-$(environmentName)-$(VERSION).jar"
+    echo "Renaming $JAR -> $JAR_VER"
+    mv build/libs/$JAR build/libs/$JAR_VER
+  displayName: "Rename JAR"
+
+# -----------------------------
+# Upload JAR to S3
+# -----------------------------
+- task: AWSCLI@1
+  displayName: "Upload JAR to S3"
+  inputs:
+    awsCredentials: 'aws-ecr-dev'
+    regionName: 'eu-west-3'
+    awsCommand: 's3 cp build/libs/*.jar s3://awweu3allbatchesartifacts'
+
+# -----------------------------
+# Prepare Dockerfile using changeEnv_region.sh (Dev → tmfdev)
+# -----------------------------
+- script: |
+    chmod +x changeEnv_region.sh
+    ./changeEnv_region.sh tmfdev
+    echo "Dockerfile After Update:"
+    cat Dockerfile
+  displayName: "Update Dockerfile (changeEnv_region.sh)"
+
+# -----------------------------
+# Login to AWS ECR
+# -----------------------------
+- script: |
+    echo "Logging in to ECR: $(ecrRepoUrl)"
+    aws ecr get-login-password --region $(ecrRegion) \
+        | docker login --username AWS --password-stdin $(ecrRepoUrl)
+  env:
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)          # secret variable
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)  # secret variable
+  displayName: "Docker Login to ECR"
+
+# -----------------------------
+# Build Docker Image
+# -----------------------------
+- script: |
+    IMAGE_TAG="$(project):$(imageName)"
+    echo "Building Docker image: $IMAGE_TAG"
+    docker build -t $IMAGE_TAG .
+  displayName: "Build Docker Image"
+
+# -----------------------------
+# Tag & Push Docker Image
+# -----------------------------
+- script: |
+    LOCAL_IMAGE="$(project):$(imageName)"
+    REMOTE_IMAGE="$(ecrRepoUrl):$(imageName)"
+
+    echo "Tagging $LOCAL_IMAGE -> $REMOTE_IMAGE"
+    docker tag $LOCAL_IMAGE $REMOTE_IMAGE
+
+    echo "Pushing Docker image to ECR"
+    docker push $REMOTE_IMAGE
+  displayName: "Push Docker Image to ECR"
