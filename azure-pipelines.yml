@@ -172,10 +172,10 @@ stages:
         IMAGE_TAG="$(IMAGE_NAME)"
 
         echo "Building Docker image: $FULL_REPO:$IMAGE_TAG"
-        docker build -t $FULL_REPO:$IMAGE_TAG .
+        sudo docker build -t $FULL_REPO:$IMAGE_TAG .
 
         echo "Pushing Docker image: $FULL_REPO:$IMAGE_TAG"
-        docker push $FULL_REPO:$IMAGE_TAG
+        sudo docker push $FULL_REPO:$IMAGE_TAG
       displayName: 'Docker build & push'
       env:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
