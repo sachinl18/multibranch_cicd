@@ -9,8 +9,7 @@ repositories {
     mavenCentral()
 }
 jar {
-    baseName = 'jb-hello-world'
-    version = '0.1.0'
+    archiveBaseName.set('jb-hello-world-0.1.0')
 }
 dependencies {
     // JUnit Jupiter API and Engine
