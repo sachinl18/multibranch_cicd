@@ -21,7 +21,7 @@ variables:
   value: 'batch-dev'
 
 - name: IMAGE_NAME
-  value: 'enate-l2-dev'
+  value: 'simple'
 
 # This MUST match the jar Gradle produces in app/build/libs/
 - name: JAR_FILE
