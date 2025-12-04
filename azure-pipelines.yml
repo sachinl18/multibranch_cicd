@@ -82,6 +82,13 @@ stages:
         ls -lah app/build/libs || true
         ls -lah app/build/libs/$(JAR_FILE) || echo "Expected JAR $(JAR_FILE) not found in app/build/libs"
       displayName: 'List build artifacts'
+    - script: |
+        echo "Copying Dockerfile into app/build/libs for Docker context"
+        cp Dockerfile app/build/libs/ || echo "Dockerfile not found at repo root!"
+        echo "Contents of app/build/libs after copying Dockerfile:"
+        ls -lah app/build/libs
+      displayName: 'Prepare Docker context (copy Dockerfile)'
+
 
     # 👉 Publish app/build/libs so the artifact root has: JAR + (optionally) Dockerfile
     - publish: app/build/libs
