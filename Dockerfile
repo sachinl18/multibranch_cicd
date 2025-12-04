@@ -1,40 +1,14 @@
-# =========================
-# 1) Build stage
-# =========================
-FROM eclipse-temurin:17-jdk AS build
- 
-# Set working directory inside the container
-WORKDIR /workspace
- 
-# Copy Gradle wrapper and build files first (better caching)
-COPY gradlew .
-COPY gradle gradle
-COPY settings.gradle .
-# If you have build.gradle in root, uncomment:
-# COPY build.gradle .
- 
-# Make gradlew executable
-RUN chmod +x gradlew
- 
-# Copy the rest of the source code
-COPY . .
- 
-# Build only the app module (skip tests if you want faster builds)
-RUN ./gradlew :app:clean :app:build -x test
- 
-# =========================
-# 2) Runtime stage
-# =========================
-FROM eclipse-temurin:17-jre
- 
+FROM eclipse-temurin:21-jre
+
+# Create app directory
 WORKDIR /app
- 
-# Copy the built JAR from the build stage
-# This assumes your jar ends up in app/build/libs/
-COPY --from=build /workspace/app/build/libs/*.jar app.jar
- 
-# Expose the port your app runs on (change if different)
+
+# Copy the built JAR from the build artifact into the image
+# This name MUST match your JAR_FILE variable and what ends up in drop/
+COPY jb-hello-world-0.1.0-1.0-SNAPSHOT.jar app.jar
+
+# Expose port if your app listens on one (change if needed)
 EXPOSE 8080
- 
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# Run the JAR
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
