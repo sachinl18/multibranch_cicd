@@ -4,15 +4,15 @@ trigger:
       - develop
 
 pool:
-  name: 'Default'      # self-hosted agent pool (same as your Lambda pipeline)
+  name: 'Default'      # your self-hosted agent pool
 
 variables:
-
-
+# (optional) if you store AWS keys in a variable group
+# - group: mumbai_azure
 
 # --------- General AWS / env settings ----------
 - name: AWS_REGION
-  value: 'ap-south-1'     # region for ECR + S3 (change if needed)
+  value: 'ap-south-1'     # region for ECR + S3
 
 - name: ENVIRONMENT_NAME
   value: 'dev'
@@ -23,13 +23,13 @@ variables:
 - name: IMAGE_NAME
   value: 'enate-l2-dev'
 
-
+# This MUST match the jar Gradle produces in app/build/libs/
 - name: JAR_FILE
   value: 'jb-hello-world-0.1.0.jar'
 
-
+# --------- S3 settings ----------
 - name: S3_BUCKET
-  value: 'batchartifacts-sachi'   # your bucket
+  value: 'batchartifacts-sachi'
 
 # unique S3 key (includes env & build number)
 - name: S3_KEY
@@ -40,14 +40,17 @@ variables:
   value: 'S3_Lmabda'   # existing AWS service connection
 
 # --------- ECR settings ----------
+# 👈 This should be just the account ID, NOT the full URL
 - name: ECR_ACCOUNT_ID
-  value: '869935097287.dkr.ecr.ap-south-1.amazonaws.com/batch-main' 
+  value: '869935097287'   # <--- your AWS account id only
 
 - name: ECR_REPOSITORY
-  value: 'batch-dev'    
-
+  value: 'batch-main'     # the ECR repo name (e.g. batch-main or batch-dev)
 
 stages:
+# =========================
+# Stage 1 - Build with Gradle
+# =========================
 - stage: Build
   displayName: 'Build (Gradle)'
   jobs:
@@ -65,20 +68,29 @@ stages:
       displayName: 'Verify build tools'
 
     - script: |
+        echo ">>>>>>>>>>>>>>>>>> Gradle Build Started"
         chmod +x gradlew
         ./gradlew clean build
+        echo "<<<<<<<<<<<<<<<<<< Gradle Build Completed"
+
+        echo ">>> After build, listing JARs under */build/libs:"
+        find . -maxdepth 4 -path "*build/libs/*.jar" -print || true
       displayName: 'Gradle: clean build'
 
     - script: |
-        echo "Listing produced jars in build/libs:"
-        ls -lah build/libs || true
-        ls -lah build/libs/$(JAR_FILE) || echo "Expected JAR $(JAR_FILE) not found"
+        echo "Listing produced jars in app/build/libs:"
+        ls -lah app/build/libs || true
+        ls -lah app/build/libs/$(JAR_FILE) || echo "Expected JAR $(JAR_FILE) not found in app/build/libs"
       displayName: 'List build artifacts'
 
-    - publish: build/libs
+    # 👉 Publish app/build/libs so the artifact root has: JAR + (optionally) Dockerfile
+    - publish: app/build/libs
       artifact: drop
       displayName: 'Publish build artifacts (for S3 + Docker)'
 
+# =========================
+# Stage 2 - Upload JAR to S3
+# =========================
 - stage: UploadToS3
   displayName: 'Upload artifact to S3'
   dependsOn: Build
@@ -114,6 +126,9 @@ stages:
         awsSubCommand: 'cp'
         awsArguments: '$(Pipeline.Workspace)/drop/$(JAR_FILE) s3://$(S3_BUCKET)/$(S3_KEY) --no-progress'
 
+# =========================
+# Stage 3 - Build & Push Docker Image to ECR
+# =========================
 - stage: BuildAndPushECR
   displayName: 'Build & Push Docker Image to ECR'
   dependsOn: UploadToS3
@@ -129,18 +144,16 @@ stages:
         ls -lah $(Pipeline.Workspace)/drop
       displayName: 'List docker context'
 
+    # 👇 No changeEnv_region.sh anymore, just use your Dockerfile as-is
     - script: |
         cd $(Pipeline.Workspace)/drop
 
-        echo "Making changeEnv_region.sh executable (if present)"
-        chmod +x changeEnv_region.sh || true
-
-        echo "Updating Dockerfile using changeEnv_region.sh for 'tmfdev'"
-        ./changeEnv_region.sh tmfdev || true
-
-        echo "Dockerfile after update:"
+        echo "Dockerfile content:"
         cat Dockerfile || echo "Dockerfile missing!"
-      displayName: 'Update Dockerfile via changeEnv_region.sh'
+
+        echo "JAR present?"
+        ls -lah $(JAR_FILE) || echo "JAR $(JAR_FILE) not found in docker context"
+      displayName: 'Check Docker context files'
 
     - script: |
         echo "Login to ECR..."
@@ -168,6 +181,3 @@ stages:
         AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
         AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
         AWS_DEFAULT_REGION: $(AWS_REGION)
-
-
-
