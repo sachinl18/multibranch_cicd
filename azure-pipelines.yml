@@ -25,7 +25,7 @@ variables:
 
 # This MUST match the jar Gradle produces in app/build/libs/
 - name: JAR_FILE
-  value: 'jb-hello-world-0.1.0.jar'
+  value: 'jb-hello-world-0.1.0-1.0-SNAPSHOT.jar'
 
 # --------- S3 settings ----------
 - name: S3_BUCKET
