@@ -8,7 +8,7 @@ pool:
 
 variables:
 # (optional) if you store AWS keys in a variable group
-# - group: mumbai_azure
+- group: mumbai_azure
 
 # --------- General AWS / env settings ----------
 - name: AWS_REGION
